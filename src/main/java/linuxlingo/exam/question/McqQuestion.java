@@ -1,6 +1,7 @@
 package linuxlingo.exam.question;
 
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Multiple Choice Question with lettered options (A/B/C/D).
@@ -30,21 +31,21 @@ public class McqQuestion extends Question {
 
     @Override
     public String present() {
-        // TODO: Implement present
-        //  1. StringBuilder sb = new StringBuilder()
-        //  2. sb.append(formatHeader()).append(" ").append(questionText).append("\n")
-        //  3. For each entry in options (ordered):
-        //     sb.append("  ").append(key).append(". ").append(value).append("\n")
-        //  4. Return sb.toString()
-        throw new UnsupportedOperationException("TODO: implement McqQuestion.present()");
+        StringBuilder sb = new StringBuilder();
+        sb.append(formatHeader()).append(" ").append(questionText).append("\n");
+        for (Map.Entry<Character, String> entry : options.entrySet()) {
+            sb.append("  ").append(entry.getKey()).append(". ").append(entry.getValue()).append("\n");
+        }
+        return sb.toString();
+        //throw new UnsupportedOperationException("TODO: implement McqQuestion.present()");
     }
 
     @Override
     public boolean checkAnswer(String answer) {
-        // TODO: Implement checkAnswer
-        //  1. If answer is null or empty → return false
-        //  2. Return Character.toUpperCase(answer.trim().charAt(0)) == correctAnswer
-        throw new UnsupportedOperationException("TODO: implement McqQuestion.checkAnswer()");
+        if (answer == null || answer.trim().isEmpty()) {
+            return false;
+        }
+        return Character.toUpperCase(answer.trim().charAt(0)) == correctAnswer;
     }
 
     public char getCorrectAnswer() {
