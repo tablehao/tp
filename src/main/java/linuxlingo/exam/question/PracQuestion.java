@@ -36,9 +36,7 @@ public class PracQuestion extends Question {
 
     @Override
     public String present() {
-        // TODO: Implement present
-        //  Return formatHeader() + " " + questionText + "\n"
-        throw new UnsupportedOperationException("TODO: implement PracQuestion.present()");
+        return formatHeader() + " " + questionText + "\n";
     }
 
     @Override
@@ -54,11 +52,12 @@ public class PracQuestion extends Question {
      * @return true if every checkpoint matches
      */
     public boolean checkVfs(VirtualFileSystem vfs) {
-        // TODO: Implement checkVfs
-        //  For each checkpoint in checkpoints:
-        //    if (!checkpoint.matches(vfs)) return false;
-        //  return true;
-        throw new UnsupportedOperationException("TODO: implement PracQuestion.checkVfs()");
+        for (Checkpoint checkpoint : checkpoints) {
+            if (!checkpoint.matches(vfs)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public List<Checkpoint> getCheckpoints() {

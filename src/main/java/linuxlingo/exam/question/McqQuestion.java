@@ -37,7 +37,6 @@ public class McqQuestion extends Question {
             sb.append("  ").append(entry.getKey()).append(". ").append(entry.getValue()).append("\n");
         }
         return sb.toString();
-        //throw new UnsupportedOperationException("TODO: implement McqQuestion.present()");
     }
 
     @Override
