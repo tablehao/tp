@@ -27,4 +27,18 @@ class ShellParserTest {
         assertEquals("hello", plan.segments.get(0).args[0]);
     }
 
+    @Test
+    public void parse_emptyInput_returnsEmptyPlan() {
+        ShellParser.ParsedPlan plan = parser.parse("");
+        assertEquals(0, plan.segments.size());
+        assertEquals(0, plan.operators.size());
+    }
+
+    @Test
+    public void parse_nullInput_returnsEmptyPlan() {
+        ShellParser.ParsedPlan plan = parser.parse(null);
+        assertEquals(0, plan.segments.size());
+        assertEquals(0, plan.operators.size());
+    }
+
 }
