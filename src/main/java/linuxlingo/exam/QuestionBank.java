@@ -6,8 +6,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import linuxlingo.exam.question.Question;
+import linuxlingo.storage.QuestionParser;
+import linuxlingo.storage.Storage;
+import linuxlingo.storage.StorageException;
 
 /**
  * Loads question bank files, organizes them by topic, and serves questions
@@ -39,15 +43,18 @@ public class QuestionBank {
      * @param directory path to the questions directory (e.g. {@code data/questions/})
      */
     public void load(Path directory) {
-        // TODO: Implement load
-        //  1. List<Path> files = Storage.listFiles(directory, ".txt")
-        //  2. For each file:
-        //     a. String topic = QuestionParser.getTopicName(file)
-        //     b. List<Question> questions = QuestionParser.parseFile(file)
-        //     c. If questions is not empty → topics.put(topic, questions)
-        //     d. Catch StorageException → skip the file (print warning to stderr)
-
-        // Stub: no-op until implemented
+        List<Path> files = Storage.listFiles(directory, ".txt");
+        for (Path file : files) {
+            try {
+                String topic = QuestionParser.getTopicName(file);
+                List<Question> questions = QuestionParser.parseFile(file);
+                if (!questions.isEmpty()) {
+                    topics.put(topic, questions);
+                }
+            } catch (StorageException e) {
+                System.err.println("Warning: " + e.getMessage());
+            }
+        }
     }
 
     /** Return a sorted list of all loaded topic names. */
@@ -71,12 +78,15 @@ public class QuestionBank {
      * @return list of questions (may be smaller than count if topic has fewer)
      */
     public List<Question> getQuestions(String topic, int count, boolean random) {
-        // TODO: Implement getQuestions (with count and random)
-        //  1. List<Question> available = new ArrayList<>(getQuestions(topic))
-        //  2. If random → Collections.shuffle(available)
-        //  3. int limit = Math.min(count, available.size())
-        //  4. Return available.subList(0, limit)
-        throw new UnsupportedOperationException("TODO: implement QuestionBank.getQuestions(topic, count, random)");
+        List<Question> available = new ArrayList<>(getQuestions(topic));
+        if (available.isEmpty() || count <= 0) {
+            return new ArrayList<>();
+        }
+        if (random) {
+            Collections.shuffle(available);
+        }
+        int limit = Math.min(count, available.size());
+        return new ArrayList<>(available.subList(0, limit));
     }
 
     /** Return the number of questions in a topic. */
@@ -93,10 +103,13 @@ public class QuestionBank {
      * Return one random question from all topics, or null if none available.
      */
     public Question getRandomQuestion() {
-        // TODO: Implement getRandomQuestion
-        //  1. Collect all questions from all topics into a flat list
-        //  2. If empty → return null
-        //  3. Return list.get(new Random().nextInt(list.size()))
-        throw new UnsupportedOperationException("TODO: implement QuestionBank.getRandomQuestion()");
+        List<Question> allQuestions = new ArrayList<>();
+        for (List<Question> questions : topics.values()) {
+            allQuestions.addAll(questions);
+        }
+        if (allQuestions.isEmpty()) {
+            return null;
+        }
+        return allQuestions.get(new Random().nextInt(allQuestions.size()));
     }
 }
