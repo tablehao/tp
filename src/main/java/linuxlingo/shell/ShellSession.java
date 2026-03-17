@@ -3,6 +3,7 @@ package linuxlingo.shell;
 import linuxlingo.cli.Ui;
 import linuxlingo.shell.command.Command;
 import linuxlingo.shell.vfs.VirtualFileSystem;
+import java.util.logging.Logger;
 
 /**
  * Manages the lifecycle of a shell session (interactive REPL + one-shot execution).
@@ -17,6 +18,9 @@ import linuxlingo.shell.vfs.VirtualFileSystem;
  * (Tab-completion via ShellCompleter is deferred beyond v1.0.)</p>
  */
 public class ShellSession {
+
+    private static final Logger LOGGER = Logger.getLogger(ShellSession.class.getName());
+
     private VirtualFileSystem vfs;
     private String workingDir;
     private String previousDir;
@@ -26,6 +30,10 @@ public class ShellSession {
     private boolean running;
 
     public ShellSession(VirtualFileSystem vfs, Ui ui) {
+        if (vfs == null) {
+            throw new IllegalArgumentException("ShellSession: vfs must not be null");
+        }
+
         this.vfs = vfs;
         this.ui = ui;
         this.workingDir = "/";
@@ -33,6 +41,8 @@ public class ShellSession {
         this.lastExitCode = 0;
         this.registry = new CommandRegistry();
         this.running = false;
+
+        LOGGER.fine("ShellSession initialised with workingDir='/'");
     }
 
     /**
@@ -45,7 +55,10 @@ public class ShellSession {
      * </ol>
      */
     public void start() {
+        assert !running : "start() called while session is already running";
+
         running = true;
+        LOGGER.info("Shell session started");
         ui.println("Welcome to LinuxLingo Shell! Type 'exit' to quit.");
 
         while (running) {
@@ -65,12 +78,14 @@ public class ShellSession {
             // Exit keyword stops the REPL
             String trimmed = input.trim();
             if (trimmed.equalsIgnoreCase("exit")) {
+                LOGGER.info("Exit keyword received... stopping REPL");
                 running = false;
                 break;
             }
 
             executePlan(input);
         }
+        LOGGER.info("Shell session ended with lastExitCode=" + lastExitCode);
     }
 
     /**
@@ -81,6 +96,7 @@ public class ShellSession {
      * @return the result of the last segment
      */
     public CommandResult executeOnce(String input) {
+        LOGGER.fine(() -> "executeOnce called with: " + input);
         return executePlanSilent(input);
     }
 
@@ -137,8 +153,14 @@ public class ShellSession {
     private CommandResult runPlan(String input) {
         ShellParser.ParsedPlan plan = new ShellParser().parse(input);
 
+        // Checking whether structure is invariant form the parser
+        assert plan.operators.size() == Math.max(0, plan.segments.size() - 1)
+                : "ParsedPlan invariant violated: operators=" + plan.operators.size()
+                + " segments=" + plan.segments.size();
+
         // When nothing to execute
         if (plan.segments.isEmpty()) {
+            LOGGER.fine("runPlan: no segments to execute");
             return CommandResult.success("");
         }
 
@@ -148,12 +170,17 @@ public class ShellSession {
         for (int i = 0; i < plan.segments.size(); i++) {
             ShellParser.Segment segment = plan.segments.get(i);
 
+            assert segment != null : "Null segment at index " + i;
+            assert segment.commandName != null && !segment.commandName.isBlank()
+                    : "Segment at index " + i + " has blank commandName";
+
             // Check the operator that precedes this segment
             // operators.get(i-1) sits between segment[i-1] and segment[i]
             if (i > 0) {
                 ShellParser.TokenType precedingOp = plan.operators.get(i-1);
 
                 if (precedingOp == ShellParser.TokenType.AND && lastExitCode != 0) {
+                    // the last command failed so skipping the next command
                     // && requires the previous command to have succeeded
                     break;
                 }
@@ -173,6 +200,7 @@ public class ShellSession {
             Command command = registry.get(segment.commandName);
             if (command == null) {
                 String errorMsg = segment.commandName + ": command not found";
+                LOGGER.warning("Command not found: '" + segment.commandName + "'");
                 ui.println(errorMsg);
                 setLastExitCode(127);
                 lastResult = CommandResult.error(errorMsg);
