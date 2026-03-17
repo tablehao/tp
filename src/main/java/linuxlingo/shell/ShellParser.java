@@ -225,21 +225,37 @@ public class ShellParser {
             case APPEND:
                 expectRedirectTarget = true;
                 pendingRedirectOp = ">>";
+            case PIPE, AND, SEMICOLON:
+                // Finalizing the current segment before recording the operator
+                if (!currentWords.isEmpty()) {
+                    segments.add(buildSegment(currentWords, currentRedirect));
+                    currentWords = new java.util.ArrayList<>();
+                    currentRedirect = null;
+                }
+                operators.add(tok.type);
             }
         }
 
-        return null;
-    }
-
-    private Segment parseSegment(String segmentStr) {
-        String[] parts = segmentStr.split("\\s+");
-        String commandName = parts[0];
-        String[] args = new String[Math.max(0, parts.length - 1)];
-
-        for (int i = 1; i < parts.length; i ++) {
-            args[i - 1] = parts[i];
+        // Finalizing the last segment (no trailing operator)
+        if (!currentWords.isEmpty()) {
+            segments.add(buildSegment(currentWords, currentRedirect));
         }
 
-        return new Segment(commandName, args, null);
+        return new ParsedPlan(segments, operators);
+    }
+
+    /**
+     * build a segment from an accumulated word list.
+     * @param words the accumulated word list
+     * @param redirect optional redirect
+     * @return the segment
+     */
+    private Segment buildSegment(List<String> words, RedirectInfo redirect) {
+        String commandName = words.get(0);
+        String[] args = new String[words.size() - 1];
+        for(int i = 1; i < words.size(); i++) {
+            args[i - 1] = words.get(i);
+        }
+        return new Segment(commandName, args, redirect);
     }
 }
