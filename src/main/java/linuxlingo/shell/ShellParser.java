@@ -116,31 +116,19 @@ public class ShellParser {
             case NORMAL:
                 switch(c) {
                 case ' ', '\t':
-                    if (!current.isEmpty()) {
-                        tokens.add(new Token(current.toString(), TokenType.WORD));
-                        current.setLength(0);
-                    }
+                    flushCurrentToken(current, tokens);
                     break;
                 case '|':
-                    if (!current.isEmpty()) {
-                        tokens.add(new Token(current.toString(), TokenType.WORD));
-                        current.setLength(0);
-                    }
+                    flushCurrentToken(current, tokens);
                     tokens.add(new Token("|", TokenType.PIPE));
                     break;
                 case ';':
-                    if (!current.isEmpty()) {
-                        tokens.add(new Token(current.toString(), TokenType.WORD));
-                        current.setLength(0);
-                    }
+                    flushCurrentToken(current, tokens);
                     tokens.add(new Token(";", TokenType.SEMICOLON));
                     break;
                 case '&':
                     if (i + 1 < input.length() && input.charAt(i + 1) == '&') {
-                        if (!current.isEmpty()) {
-                            tokens.add(new Token(current.toString(), TokenType.WORD));
-                            current.setLength(0);
-                        }
+                        flushCurrentToken(current, tokens);
                         tokens.add(new Token("&&", TokenType.AND));
                         i++; // to skip the second '&'
                     } else {
@@ -148,10 +136,7 @@ public class ShellParser {
                     }
                     break;
                 case '>':
-                    if (!current.isEmpty()) {
-                        tokens.add(new Token(current.toString(), TokenType.WORD));
-                        current.setLength(0);
-                    }
+                    flushCurrentToken(current, tokens);
                     if (i + 1 < input.length() && input.charAt(i + 1) == '>') {
                         tokens.add(new Token(">>", TokenType.APPEND));
                         i++; // to skip the second '>'
@@ -259,5 +244,12 @@ public class ShellParser {
             args[i - 1] = words.get(i);
         }
         return new Segment(commandName, args, redirect);
+    }
+
+    private void flushCurrentToken(StringBuilder current, List<Token> tokens) {
+        if (!current.isEmpty()){
+            tokens.add(new Token(current.toString(), TokenType.WORD));
+            current.setLength(0);
+        }
     }
 }
