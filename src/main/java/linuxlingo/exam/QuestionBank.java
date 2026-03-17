@@ -6,7 +6,10 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import linuxlingo.exam.question.Question;
 import linuxlingo.storage.QuestionParser;
@@ -21,9 +24,9 @@ import linuxlingo.storage.StorageException;
  *
  * <h3>Data flow</h3>
  * <pre>
- * data/questions/navigation.txt  ──┐
- * data/questions/permissions.txt ──┤──→ QuestionParser ──→ QuestionBank (topic → List&lt;Question&gt;)
- * data/questions/...             ──┘
+ * data/questions/navigation.txt  -->
+ * data/questions/permissions.txt --> QuestionParser --> QuestionBank (topic -> List&lt;Question&gt;)
+ * data/questions/...             -->
  * </pre>
  *
  * <h3>Topic naming</h3>
@@ -31,6 +34,7 @@ import linuxlingo.storage.StorageException;
  * e.g. {@code navigation.txt} → topic "navigation".
  */
 public class QuestionBank {
+    private static final Logger LOGGER = Logger.getLogger(QuestionBank.class.getName());
     private final Map<String, List<Question>> topics;
 
     public QuestionBank() {
@@ -43,18 +47,22 @@ public class QuestionBank {
      * @param directory path to the questions directory (e.g. {@code data/questions/})
      */
     public void load(Path directory) {
-        List<Path> files = Storage.listFiles(directory, ".txt");
+        Path validatedDirectory = Objects.requireNonNull(directory, "directory must not be null");
+        List<Path> files = Storage.listFiles(validatedDirectory, ".txt");
         for (Path file : files) {
             try {
                 String topic = QuestionParser.getTopicName(file);
                 List<Question> questions = QuestionParser.parseFile(file);
                 if (!questions.isEmpty()) {
-                    topics.put(topic, questions);
+                    topics.put(topic, new ArrayList<>(questions));
+                } else {
+                    LOGGER.log(Level.FINE, "Skipping empty question bank file: {0}", file);
                 }
             } catch (StorageException e) {
-                System.err.println("Warning: " + e.getMessage());
+                LOGGER.log(Level.WARNING, "Failed to load question bank file: " + file, e);
             }
         }
+        assert topics.values().stream().noneMatch(List::isEmpty) : "Loaded topic lists should not be empty";
     }
 
     /** Return a sorted list of all loaded topic names. */
@@ -66,7 +74,8 @@ public class QuestionBank {
 
     /** Return all questions for a topic, or empty list if unknown. */
     public List<Question> getQuestions(String topic) {
-        return topics.getOrDefault(topic, new ArrayList<>());
+        Objects.requireNonNull(topic, "topic must not be null");
+        return new ArrayList<>(topics.getOrDefault(topic, Collections.emptyList()));
     }
 
     /**
@@ -96,6 +105,7 @@ public class QuestionBank {
 
     /** Check whether the given topic has been loaded. */
     public boolean hasTopic(String topic) {
+        Objects.requireNonNull(topic, "topic must not be null");
         return topics.containsKey(topic);
     }
 
