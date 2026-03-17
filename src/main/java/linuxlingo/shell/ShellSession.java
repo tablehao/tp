@@ -48,15 +48,29 @@ public class ShellSession {
      * </ol>
      */
     public void start() {
-        // TODO: Implement interactive REPL
-        //  1. Set running = true
-        //  2. Use ui.readLine(getPrompt()) to read input
-        //  3. While running:
-        //     - Read input
-        //     - Skip empty lines
-        //     - Handle "back"/"exit"/"done" → running = false; break
-        //     - Call executePlan(input)
-        throw new UnsupportedOperationException("TODO: implement ShellSession.start()");
+        running = true;
+        ui.println("Welcome to LinuxLingo Shell! Type 'exit' to quit.");
+
+        while (running) {
+            String input = ui.readLine(getPrompt());
+
+            // null signals end of piped test input
+            if (input == null) {
+                running = false;
+                break;
+            }
+
+            // Skipping blank lines and redisplaying the prompt
+            if (input.trim().isEmpty()) {
+                continue;
+            }
+
+            // Exit keyword stop the REPL
+            String trimmed = input.trim();
+            if (trimmed.equalsIgnoreCase("exit")) {
+                running = false;
+                break;
+            }
     }
 
     // ──────────────────────────────────────────────────────────────
