@@ -120,19 +120,21 @@ public class ShellParser {
                         tokens.add(new Token(current.toString(), TokenType.WORD));
                         current.setLength(0);
                     }
-
+                    break;
                 case '|':
                     if (!current.isEmpty()) {
                         tokens.add(new Token(current.toString(), TokenType.WORD));
                         current.setLength(0);
                     }
                     tokens.add(new Token("|", TokenType.PIPE));
+                    break;
                 case ';':
                     if (!current.isEmpty()) {
                         tokens.add(new Token(current.toString(), TokenType.WORD));
                         current.setLength(0);
                     }
                     tokens.add(new Token(";", TokenType.SEMICOLON));
+                    break;
                 case '&':
                     if (i + 1 < input.length() && input.charAt(i + 1) == '&') {
                         if (!current.isEmpty()) {
@@ -144,6 +146,7 @@ public class ShellParser {
                     } else {
                         current.append(c); // treat lone '&' symbol as an ordinary char
                     }
+                    break;
                 case '>':
                     if (!current.isEmpty()) {
                         tokens.add(new Token(current.toString(), TokenType.WORD));
@@ -155,15 +158,31 @@ public class ShellParser {
                     } else {
                         tokens.add(new Token(">", TokenType.REDIRECT));
                     }
+                    break;
                 case '\'':
-                    state = State.IN_SINGLE_QUOTE; // do not add quote to current
+                    state = State.IN_SINGLE_QUOTE;
+                    break;// do not add quote to current
                 case '"':
-                    state = State.IN_DOUBLE_QUOTE; // do not add quote to current
+                    state = State.IN_DOUBLE_QUOTE;
+                    break;// do not add quote to current
                 default:
                     current.append(c);
                 }
+            case IN_SINGLE_QUOTE:
+                if (c == '\'') {
+                    state = State.NORMAL; // closing quote, not to be added to current
+                } else {
+                    current.append(c); // everything inside single quotes is literal
+                }
+                break;
+            case IN_DOUBLE_QUOTE:
+                if (c == '"') {
+                    state = State.NORMAL; // closing quote, not to be added to current
+                } else {
+                    current.append(c); // everything inside double quotes is literal
+                }
+                break;
             }
-
         }
 
         return null;
