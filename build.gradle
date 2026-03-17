@@ -17,6 +17,7 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    jvmArgs '-ea'
 
     testLogging {
         events "passed", "skipped", "failed"
@@ -31,6 +32,7 @@ test {
 
 application {
     mainClass.set("linuxlingo.LinuxLingo")
+    applicationDefaultJvmArgs = ['-ea']
 }
 
 shadowJar {
@@ -43,5 +45,6 @@ checkstyle {
 }
 
 run{
+    jvmArgs '-ea'
     standardInput = System.in
 }
