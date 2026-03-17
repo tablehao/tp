@@ -41,4 +41,25 @@ class ShellParserTest {
         assertEquals(0, plan.operators.size());
     }
 
+    @Test
+    public void parse_pipeCommand_returnsTwoSegments() {
+        ShellParser.ParsedPlan plan = parser.parse("ls -la | grep test");
+        assertEquals(2, plan.segments.size());
+        assertEquals(1, plan.operators.size());
+        assertEquals(ShellParser.TokenType.PIPE, plan.operators.get(0));
+        assertEquals("ls", plan.segments.get(0).commandName);
+        assertEquals("grep", plan.segments.get(1).commandName);
+    }
+
+    @Test
+    public void parse_andCommand_returnsTwoSegments() {
+        ShellParser.ParsedPlan plan = parser.parse("mkdir test && cd test");
+        assertEquals(2, plan.segments.size());
+        assertEquals(1, plan.operators.size());
+        assertEquals(ShellParser.TokenType.AND, plan.operators.get(0));
+        assertEquals("mkdir", plan.segments.get(0).commandName);
+        assertEquals("cd", plan.segments.get(1).commandName);
+    }
+
+
 }
