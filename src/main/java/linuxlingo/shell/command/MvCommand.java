@@ -1,7 +1,11 @@
 package linuxlingo.shell.command;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import linuxlingo.shell.CommandResult;
 import linuxlingo.shell.ShellSession;
+import linuxlingo.shell.vfs.VfsException;
 
 /**
  * Moves or renames files or directories.
@@ -12,12 +16,23 @@ import linuxlingo.shell.ShellSession;
 public class MvCommand implements Command {
     @Override
     public CommandResult execute(ShellSession session, String[] args, String stdin) {
-        // TODO: Implement mv
-        //  1. If not exactly two args → return CommandResult.error("mv: " + getUsage())
-        //  2. session.getVfs().move(args[0], args[1], session.getWorkingDir())
-        //     Catch VfsException → return CommandResult.error("mv: " + e.getMessage())
-        //  3. Return CommandResult.success("")
-        throw new UnsupportedOperationException("TODO: implement MvCommand");
+        List<String> paths = new ArrayList<>();
+        for (String arg : args) {
+            if (!arg.startsWith("-")) {
+                paths.add(arg);
+            }
+        }
+
+        if (paths.size() != 2) {
+            return CommandResult.error("mv: " + getUsage());
+        }
+
+        try {
+            session.getVfs().move(paths.get(0), paths.get(1), session.getWorkingDir());
+            return CommandResult.success("");
+        } catch (VfsException e) {
+            return CommandResult.error("mv: " + e.getMessage());
+        }
     }
 
     @Override

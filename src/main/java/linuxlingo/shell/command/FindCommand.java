@@ -1,7 +1,12 @@
 package linuxlingo.shell.command;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import linuxlingo.shell.CommandResult;
 import linuxlingo.shell.ShellSession;
+import linuxlingo.shell.vfs.FileNode;
+import linuxlingo.shell.vfs.VfsException;
 
 /**
  * Finds files by name pattern under a given path.
@@ -12,14 +17,23 @@ import linuxlingo.shell.ShellSession;
 public class FindCommand implements Command {
     @Override
     public CommandResult execute(ShellSession session, String[] args, String stdin) {
-        // TODO: Implement find
-        //  1. Parse args: expect <path> -name <pattern>
-        //     If malformed → return CommandResult.error("find: " + getUsage())
-        //  2. List<FileNode> matches = session.getVfs().findByName(path, session.getWorkingDir(), pattern)
-        //     Catch VfsException → return CommandResult.error("find: " + e.getMessage())
-        //  3. For each match: output node.getAbsolutePath(), one per line
-        //  4. Return CommandResult.success(joined paths)
-        throw new UnsupportedOperationException("TODO: implement FindCommand");
+        if (args.length != 3 || !args[1].equals("-name")) {
+            return CommandResult.error("find: " + getUsage());
+        }
+
+        String path = args[0];
+        String pattern = args[2];
+
+        try {
+            List<FileNode> matches = session.getVfs().findByName(path, session.getWorkingDir(), pattern);
+            List<String> paths = new ArrayList<>();
+            for (FileNode node : matches) {
+                paths.add(node.getAbsolutePath());
+            }
+            return CommandResult.success(String.join("\n", paths));
+        } catch (VfsException e) {
+            return CommandResult.error("find: " + e.getMessage());
+        }
     }
 
     @Override

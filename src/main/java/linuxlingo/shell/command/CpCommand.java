@@ -1,7 +1,11 @@
 package linuxlingo.shell.command;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import linuxlingo.shell.CommandResult;
 import linuxlingo.shell.ShellSession;
+import linuxlingo.shell.vfs.VfsException;
 
 /**
  * Copies files or directories.
@@ -12,13 +16,27 @@ import linuxlingo.shell.ShellSession;
 public class CpCommand implements Command {
     @Override
     public CommandResult execute(ShellSession session, String[] args, String stdin) {
-        // TODO: Implement cp
-        //  1. Parse flag: -r (recursive, required for directories)
-        //  2. If not exactly two non-flag args → return CommandResult.error("cp: " + getUsage())
-        //  3. session.getVfs().copy(src, dest, session.getWorkingDir(), recursive)
-        //     Catch VfsException → return CommandResult.error("cp: " + e.getMessage())
-        //  4. Return CommandResult.success("")
-        throw new UnsupportedOperationException("TODO: implement CpCommand");
+        boolean recursive = false;
+        List<String> paths = new ArrayList<>();
+
+        for (String arg : args) {
+            if (arg.equals("-r")) {
+                recursive = true;
+            } else if (!arg.startsWith("-")) {
+                paths.add(arg);
+            }
+        }
+
+        if (paths.size() != 2) {
+            return CommandResult.error("cp: " + getUsage());
+        }
+
+        try {
+            session.getVfs().copy(paths.get(0), paths.get(1), session.getWorkingDir(), recursive);
+            return CommandResult.success("");
+        } catch (VfsException e) {
+            return CommandResult.error("cp: " + e.getMessage());
+        }
     }
 
     @Override

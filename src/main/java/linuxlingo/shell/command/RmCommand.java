@@ -1,7 +1,11 @@
 package linuxlingo.shell.command;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import linuxlingo.shell.CommandResult;
 import linuxlingo.shell.ShellSession;
+import linuxlingo.shell.vfs.VfsException;
 
 /**
  * Removes files or directories.
@@ -12,14 +16,33 @@ import linuxlingo.shell.ShellSession;
 public class RmCommand implements Command {
     @Override
     public CommandResult execute(ShellSession session, String[] args, String stdin) {
-        // TODO: Implement rm
-        //  1. Parse flags: -r (recursive), -f (force / suppress errors)
-        //  2. If no path args → return CommandResult.error("rm: missing operand")
-        //  3. For each path arg:
-        //     session.getVfs().delete(path, session.getWorkingDir(), recursive, force)
-        //     Catch VfsException → return CommandResult.error("rm: " + e.getMessage())
-        //  4. Return CommandResult.success("")
-        throw new UnsupportedOperationException("TODO: implement RmCommand");
+        boolean recursive = false;
+        boolean force = false;
+        List<String> paths = new ArrayList<>();
+
+        for (String arg : args) {
+            if (arg.equals("-r")) {
+                recursive = true;
+            } else if (arg.equals("-f")) {
+                force = true;
+            } else if (!arg.startsWith("-")) {
+                paths.add(arg);
+            }
+        }
+
+        if (paths.isEmpty()) {
+            return CommandResult.error("rm: missing operand");
+        }
+
+        for (String path: paths) {
+            try {
+                session.getVfs().delete(path, session.getWorkingDir(), recursive, force);
+            } catch (VfsException e) {
+                return CommandResult.error("rm: " + e.getMessage());
+            }
+        }
+
+        return CommandResult.success("");
     }
 
     @Override

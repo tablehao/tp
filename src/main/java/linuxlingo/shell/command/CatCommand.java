@@ -2,6 +2,7 @@ package linuxlingo.shell.command;
 
 import linuxlingo.shell.CommandResult;
 import linuxlingo.shell.ShellSession;
+import linuxlingo.shell.vfs.VfsException;
 
 /**
  * Displays file contents. Supports concatenating multiple files.
@@ -12,15 +13,22 @@ import linuxlingo.shell.ShellSession;
 public class CatCommand implements Command {
     @Override
     public CommandResult execute(ShellSession session, String[] args, String stdin) {
-        // TODO: Implement cat
-        //  1. If args present → read from files (ignore stdin, per Command convention)
-        //     For each file arg:
-        //       content += session.getVfs().readFile(arg, session.getWorkingDir())
-        //       Catch VfsException → return CommandResult.error("cat: " + e.getMessage())
-        //  2. Else if stdin != null → return CommandResult.success(stdin)
-        //  3. Else → return CommandResult.error("cat: missing file operand")
-        //  4. Return CommandResult.success(concatenated content)
-        throw new UnsupportedOperationException("TODO: implement CatCommand");
+        if (args.length > 0) {
+            StringBuilder sb = new StringBuilder();
+            for (String arg : args) {
+                try {
+                    String content = session.getVfs().readFile(arg, session.getWorkingDir());
+                    sb.append(content);
+                } catch (VfsException e) {
+                    return CommandResult.error("cat: " + e.getMessage());
+                }
+            }
+            return CommandResult.success(sb.toString());
+        } else if (stdin != null) {
+            return CommandResult.success(stdin);
+        } else {
+            return CommandResult.error("cat: missing file operand");
+        }
     }
 
     @Override
