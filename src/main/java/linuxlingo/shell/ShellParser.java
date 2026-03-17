@@ -1,6 +1,7 @@
 package linuxlingo.shell;
 
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Transforms a raw input string into a structured execution plan.
@@ -26,6 +27,8 @@ import java.util.List;
  */
 public class ShellParser {
 
+    private static final Logger LOGGER =  Logger.getLogger(ShellParser.class.getName());
+
     public enum TokenType {
         WORD, PIPE, REDIRECT, APPEND, AND, SEMICOLON
     }
@@ -34,13 +37,21 @@ public class ShellParser {
         public final String value;
         public final TokenType type;
 
-        public Token(String value, TokenType type) {
+        public Token(String value, TokenType type) throws IllegalArgumentException {
+            if (value == null) {
+                throw new IllegalArgumentException("Token value must not be null");
+            }
+            if (type == null) {
+                throw new IllegalArgumentException("Token type must not be null");
+            }
+
             this.value = value;
             this.type = type;
         }
 
         @Override
         public String toString() {
+
             return type + ":" + value;
         }
     }
@@ -50,6 +61,12 @@ public class ShellParser {
         public final String target;   // file path
 
         public RedirectInfo(String operator, String target) {
+            if (!">".equals(operator) && !">>".equals(operator)) {
+                throw new IllegalArgumentException("RedirectInfo operator must be '>' or '>>', got: " + operator);
+            }
+            if (target == null || target.isBlank()) {
+                throw new IllegalArgumentException("RedirectInfo target must no be null or blank");
+            }
             this.operator = operator;
             this.target = target;
         }
@@ -65,6 +82,13 @@ public class ShellParser {
         public final RedirectInfo redirect;
 
         public Segment(String commandName, String[] args, RedirectInfo redirect) {
+            if (commandName == null || commandName.isBlank()) {
+                throw new IllegalArgumentException("Segment commandName must not be null or blank");
+            }
+            if (args == null) {
+                throw new IllegalArgumentException("Segment args must not be null");
+            }
+
             this.commandName = commandName;
             this.args = args;
             this.redirect = redirect;
@@ -76,6 +100,17 @@ public class ShellParser {
         public final List<TokenType> operators;
 
         public ParsedPlan(List<Segment> segments, List<TokenType> operators) {
+            if (segments == null) {
+                throw new IllegalArgumentException("ParsedPlan segments must not be null");
+            }
+            if (operators == null) {
+                throw new IllegalArgumentException("ParsedPLan operators must not be null");
+            }
+
+            assert operators.size() == Math.max(0,segments.size() - 1)
+                : "operators.size()=" + operators.size()
+                        + " but segments.size()=" + segments.size();
+
             this.segments = segments;
             this.operators = operators;
         }
@@ -92,51 +127,183 @@ public class ShellParser {
      *   <li>Within each segment, extract command name, args, and optional redirect info.</li>
      * </ol>
      */
-    public ParsedPlan parse(String input) {
+    public ParsedPlan parse(String input) throws IllegalArgumentException {
         List<Segment> segments = new java.util.ArrayList<>();
         List<TokenType> operators = new java.util.ArrayList<>();
 
+        // Edge case
         if (input == null || input.trim().isEmpty()) {
+            LOGGER.fine("parse() called with null or blank input - returning empty plan");
             return new ParsedPlan(segments, operators);
         }
 
-        String trimmed = input.trim();
+        LOGGER.fine("Parsing input: " + input);
 
-        if (trimmed.contains(" | ")) {
-            String[] pipeParts = trimmed.split(" \\| ");
-            for (int i = 0; i < pipeParts.length; i++) {
-                segments.add(parseSegment(pipeParts[i].trim()));
-                if (i <pipeParts.length - 1) {
-                    operators.add(TokenType.PIPE);
+        // Tokenizer (char-by-char state machine)
+        List<Token> tokens = new java.util.ArrayList<>();
+
+        enum State { NORMAL, IN_SINGLE_QUOTE, IN_DOUBLE_QUOTE}
+        State state = State.NORMAL;
+        StringBuilder current = new StringBuilder();
+
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+
+            switch(state) {
+            case NORMAL:
+                switch(c) {
+                case ' ', '\t':
+                    flushCurrentToken(current, tokens);
+                    break;
+                case '|':
+                    flushCurrentToken(current, tokens);
+                    tokens.add(new Token("|", TokenType.PIPE));
+                    break;
+                case ';':
+                    flushCurrentToken(current, tokens);
+                    tokens.add(new Token(";", TokenType.SEMICOLON));
+                    break;
+                case '&':
+                    if (i + 1 < input.length() && input.charAt(i + 1) == '&') {
+                        flushCurrentToken(current, tokens);
+                        tokens.add(new Token("&&", TokenType.AND));
+                        i++; // to skip the second '&'
+                    } else {
+                        current.append(c); // treat lone '&' symbol as an ordinary char
+                    }
+                    break;
+                case '>':
+                    flushCurrentToken(current, tokens);
+                    if (i + 1 < input.length() && input.charAt(i + 1) == '>') {
+                        tokens.add(new Token(">>", TokenType.APPEND));
+                        i++; // to skip the second '>'
+                    } else {
+                        tokens.add(new Token(">", TokenType.REDIRECT));
+                    }
+                    break;
+                case '\'':
+                    state = State.IN_SINGLE_QUOTE;
+                    break;// do not add quote to current
+                case '"':
+                    state = State.IN_DOUBLE_QUOTE;
+                    break;// do not add quote to current
+                default:
+                    current.append(c);
                 }
-            }
-            return new ParsedPlan(segments, operators);
-        }
-
-        if (trimmed.contains( " && ")) {
-            String[] andParts = trimmed.split(" && ");
-            for (int i = 0; i < andParts.length; i++) {
-                segments.add(parseSegment(andParts[i].trim()));
-                if (i < andParts.length - 1) {
-                    operators.add(TokenType.AND);
+                break;
+            case IN_SINGLE_QUOTE:
+                if (c == '\'') {
+                    state = State.NORMAL; // closing quote, not to be added to current
+                } else {
+                    current.append(c); // everything inside single quotes is literal
                 }
+                break;
+            case IN_DOUBLE_QUOTE:
+                if (c == '"') {
+                    state = State.NORMAL; // closing quote, not to be added to current
+                } else {
+                    current.append(c); // everything inside double quotes is literal
+                }
+                break;
+            default:
+                assert false : "Unhandled tokenizer state: " + state;
+                break;
             }
-            return new ParsedPlan(segments, operators);
         }
 
-        segments.add(parseSegment(trimmed));
+        // Flushing any remaining token
+        flushCurrentToken(current, tokens);
+
+        // Splitting tokens into Segment objects
+        // Traverse the token list accumulating WORDs into the current segment
+        // On REDIRECT/APPEND: consume the next WORD as the redirect target
+        // ON PIPE/AND/SEMICOLON: finalize the current segment, record operator
+        List<String> currentWords = new java.util.ArrayList<>();
+        RedirectInfo currentRedirect = null;
+        boolean expectRedirectTarget = false;
+        String pendingRedirectOp = null;
+
+        for (Token tok : tokens) {
+            if (expectRedirectTarget) {
+                // The token immediately after > or >> is considered the target file path
+                if (tok.type == TokenType.WORD) {
+                    currentRedirect = new RedirectInfo(pendingRedirectOp, tok.value);
+                    expectRedirectTarget = false;
+                    pendingRedirectOp = null;
+                    continue;
+                }
+                // For improper input i.e. no target provided, reset
+
+                expectRedirectTarget = false;
+                pendingRedirectOp = null;
+            }
+
+            switch (tok.type) {
+            case WORD:
+                currentWords.add(tok.value);
+                break;
+            case REDIRECT:
+                expectRedirectTarget = true;
+                pendingRedirectOp = ">";
+                break;
+            case APPEND:
+                expectRedirectTarget = true;
+                pendingRedirectOp = ">>";
+                break;
+            case PIPE, AND, SEMICOLON:
+                // Finalizing the current segment before recording the operator
+                if (!currentWords.isEmpty()) {
+                    segments.add(buildSegment(currentWords, currentRedirect));
+                    currentWords = new java.util.ArrayList<>();
+                    currentRedirect = null;
+                }
+                operators.add(tok.type);
+                break;
+            default: // unreachable
+                break;
+            }
+        }
+
+        // Finalizing the last segment (no trailing operator)
+        if (!currentWords.isEmpty()) {
+            segments.add(buildSegment(currentWords, currentRedirect));
+        }
+
+        assert operators.size() == Math.max(0, segments.size() - 1)
+                : "Invariant broken after parse: operators=" + operators.size()
+                + " segments=" + segments.size();
+
+        LOGGER.fine(() -> "Parse complete: " + segments.size()
+                + " segment(s), " + operators.size() + " operator(s)");
+
         return new ParsedPlan(segments, operators);
     }
 
-    private Segment parseSegment(String segmentStr) {
-        String[] parts = segmentStr.split("\\s+");
-        String commandName = parts[0];
-        String[] args = new String[Math.max(0, parts.length - 1)];
+    /**
+     * build a segment from an accumulated word list.
+     * @param words the accumulated word list
+     * @param redirect optional redirect
+     * @return the segment
+     */
+    private Segment buildSegment(List<String> words, RedirectInfo redirect) {
+        assert words != null && !words.isEmpty()
+            : "buildSegmend() requires a non-empty word list";
 
-        for (int i = 1; i < parts.length; i ++) {
-            args[i - 1] = parts[i];
+        String commandName = words.get(0);
+        String[] args = new String[words.size()-1];
+        for(int i = 1; i < words.size(); i++) {
+            args[i-1] = words.get(i);
         }
 
-        return new Segment(commandName, args, null);
+        return new Segment(commandName, args, redirect);
+    }
+
+    private void flushCurrentToken(StringBuilder current, List<Token> tokens) throws IllegalArgumentException {
+        assert current != null : "current StringBuilder must not be null";
+        assert tokens != null : "tokens list must not be null";
+        if (!current.isEmpty()){
+            tokens.add(new Token(current.toString(), TokenType.WORD));
+            current.setLength(0);
+        }
     }
 }

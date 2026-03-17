@@ -1,7 +1,9 @@
 package linuxlingo.shell;
 
 import linuxlingo.cli.Ui;
+import linuxlingo.shell.command.Command;
 import linuxlingo.shell.vfs.VirtualFileSystem;
+import java.util.logging.Logger;
 
 /**
  * Manages the lifecycle of a shell session (interactive REPL + one-shot execution).
@@ -16,6 +18,9 @@ import linuxlingo.shell.vfs.VirtualFileSystem;
  * (Tab-completion via ShellCompleter is deferred beyond v1.0.)</p>
  */
 public class ShellSession {
+
+    private static final Logger LOGGER = Logger.getLogger(ShellSession.class.getName());
+
     private VirtualFileSystem vfs;
     private String workingDir;
     private String previousDir;
@@ -25,6 +30,10 @@ public class ShellSession {
     private boolean running;
 
     public ShellSession(VirtualFileSystem vfs, Ui ui) {
+        if (vfs == null) {
+            throw new IllegalArgumentException("ShellSession: vfs must not be null");
+        }
+
         this.vfs = vfs;
         this.ui = ui;
         this.workingDir = "/";
@@ -32,11 +41,9 @@ public class ShellSession {
         this.lastExitCode = 0;
         this.registry = new CommandRegistry();
         this.running = false;
-    }
 
-    // ──────────────────────────────────────────────────────────────
-    // TODO: Interactive REPL (Owner: A)
-    // ──────────────────────────────────────────────────────────────
+        LOGGER.fine("ShellSession initialised with workingDir='/'");
+    }
 
     /**
      * Enter interactive shell REPL. Steps:
@@ -48,20 +55,38 @@ public class ShellSession {
      * </ol>
      */
     public void start() {
-        // TODO: Implement interactive REPL
-        //  1. Set running = true
-        //  2. Use ui.readLine(getPrompt()) to read input
-        //  3. While running:
-        //     - Read input
-        //     - Skip empty lines
-        //     - Handle "back"/"exit"/"done" → running = false; break
-        //     - Call executePlan(input)
-        throw new UnsupportedOperationException("TODO: implement ShellSession.start()");
-    }
+        assert !running : "start() called while session is already running";
 
-    // ──────────────────────────────────────────────────────────────
-    // TODO: One-shot execution (Owner: A)
-    // ──────────────────────────────────────────────────────────────
+        running = true;
+        LOGGER.info("Shell session started");
+        ui.println("Welcome to LinuxLingo Shell! Type 'exit' to quit.");
+
+        while (running) {
+            String input = ui.readLine(getPrompt());
+
+            // null signals end of piped test input
+            if (input == null) {
+                running = false;
+                break;
+            }
+
+            // Skip blank lines and redisplay the prompt
+            if (input.trim().isEmpty()) {
+                continue;
+            }
+
+            // Exit keyword stops the REPL
+            String trimmed = input.trim();
+            if (trimmed.equalsIgnoreCase("exit")) {
+                LOGGER.info("Exit keyword received... stopping REPL");
+                running = false;
+                break;
+            }
+
+            executePlan(input);
+        }
+        LOGGER.info("Shell session ended with lastExitCode=" + lastExitCode);
+    }
 
     /**
      * Execute a single command string silently (for programmatic / exam use).
@@ -71,21 +96,9 @@ public class ShellSession {
      * @return the result of the last segment
      */
     public CommandResult executeOnce(String input) {
-        // TODO: Implement one-shot execution
-        //  Delegate to executePlanSilent(input) and return its result.
-        //  This is the public entry-point for programmatic / exam callers;
-        //  executePlanSilent does the actual parse-execute-redirect work.
-        //
-        //  Implementation (≈ 1 line):
-        //    return executePlanSilent(input);
-        //
-        //  Do NOT print to Ui — this is for exam / programmatic use.
-        throw new UnsupportedOperationException("TODO: implement ShellSession.executeOnce()");
+        LOGGER.fine(() -> "executeOnce called with: " + input);
+        return executePlanSilent(input);
     }
-
-    // ──────────────────────────────────────────────────────────────
-    // TODO: Plan execution engine (Owner: A)
-    // ──────────────────────────────────────────────────────────────
 
     /**
      * Execute a parsed plan and print output to the UI.
@@ -108,21 +121,135 @@ public class ShellSession {
      * </ol>
      */
     private void executePlan(String input) {
-        // TODO: Implement plan execution with pipe/redirect/AND/SEMICOLON support
-        throw new UnsupportedOperationException("TODO: implement ShellSession.executePlan()");
+        CommandResult result = runPlan(input);
+        // Print the final stdout produced by the last segment
+        if (result != null && !result.getStdout().isEmpty()) {
+            ui.println(result.getStdout());
+        }
     }
 
     /**
      * Silent variant of {@link #executePlan(String)} — returns result instead of printing.
      */
     private CommandResult executePlanSilent(String input) {
-        // TODO: Implement silent plan execution (same logic, no ui.println)
-        throw new UnsupportedOperationException("TODO: implement ShellSession.executePlanSilent()");
+        return runPlan(input);
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // Getters / Setters (Provided)
-    // ──────────────────────────────────────────────────────────────
+    /**
+     * Core plan execution engine shared by both {@link #executePlan} and
+     * {@link #executePlanSilent}.
+     *
+     * <p>Operator semantics:</p>
+     * <ul>
+     *   <li>{@code PIPE}      — stdout of segment N becomes stdin of segment N+1</li>
+     *   <li>{@code AND}       — segment N+1 is skipped if lastExitCode != 0</li>
+     *   <li>{@code SEMICOLON} — segment N+1 always runs regardless of exit code</li>
+     * </ul>
+     *
+     * @param input raw command string
+     * @return the {@link CommandResult} of the final executed segment, or a
+     *         zero-exit success result if the input was blank / produced no segments
+     */
+    private CommandResult runPlan(String input) {
+        ShellParser.ParsedPlan plan = new ShellParser().parse(input);
+
+        // Checking whether structure is invariant form the parser
+        assert plan.operators.size() == Math.max(0, plan.segments.size() - 1)
+                : "ParsedPlan invariant violated: operators=" + plan.operators.size()
+                + " segments=" + plan.segments.size();
+
+        // When nothing to execute
+        if (plan.segments.isEmpty()) {
+            LOGGER.fine("runPlan: no segments to execute");
+            return CommandResult.success("");
+        }
+
+        CommandResult lastResult = CommandResult.success("");
+        String pipedStdin = null; // stdout carried forward through a pipe
+
+        for (int i = 0; i < plan.segments.size(); i++) {
+            ShellParser.Segment segment = plan.segments.get(i);
+
+            assert segment != null : "Null segment at index " + i;
+            assert segment.commandName != null && !segment.commandName.isBlank()
+                    : "Segment at index " + i + " has blank commandName";
+
+            // Check the operator that precedes this segment
+            // operators.get(i-1) sits between segment[i-1] and segment[i]
+            if (i > 0) {
+                ShellParser.TokenType precedingOp = plan.operators.get(i-1);
+
+                if (precedingOp == ShellParser.TokenType.AND && lastExitCode != 0) {
+                    // the last command failed so skipping the next command
+                    // && requires the previous command to have succeeded
+                    break;
+                }
+
+                if (precedingOp != ShellParser.TokenType.PIPE) {
+                    // SEMICOLON or AND (that passed): clear any leftover piped stdin
+                    pipedStdin = null;
+                }
+                // PIPE: pipedStdin was already set at the end of the previous iteration
+            }
+
+            // pipedStdin is non-null only when the preceding operator was PIPE
+            String stdin = pipedStdin;
+            pipedStdin = null;
+
+            //  Look up command in registry
+            Command command = registry.get(segment.commandName);
+            if (command == null) {
+                String errorMsg = segment.commandName + ": command not found";
+                LOGGER.warning("Command not found: '" + segment.commandName + "'");
+                ui.println(errorMsg);
+                setLastExitCode(127);
+                lastResult = CommandResult.error(errorMsg);
+                continue; // no piped output from a missing command
+            }
+
+            // Execute the command
+            CommandResult result = command.execute(this, segment.args, stdin);
+
+            //  Print stderr immediately (user is not redirected)
+            if (!result.getStderr().isEmpty()) {
+                ui.println(result.getStderr());
+            }
+
+            // Handle output redirect (> or >>)
+            if (segment.redirect != null) {
+                // Flush stdout to the target file; suppress it from terminal / pipe
+                vfs.writeFile(
+                        segment.redirect.target,
+                        workingDir,
+                        result.getStdout(),
+                        segment.redirect.isAppend()
+                );
+                // stdout consumed by redirect, replaced with an empty success so
+                // nothing gets printed or forwarded downstream
+                result = CommandResult.success("");
+            }
+
+            // Carry stdout forward if the next operator is PIPE
+            boolean nextIsPipe = (i < plan.operators.size())
+                    && plan.operators.get(i) == ShellParser.TokenType.PIPE;
+            if (nextIsPipe) {
+                pipedStdin = result.getStdout();
+            }
+
+            // Update session state
+            setLastExitCode(result.getExitCode());
+            lastResult = result;
+
+            if (result.shouldExit()) {
+                running = false;
+                break;
+            }
+        }
+
+        return lastResult;
+    }
+
+    // Getters / Setters
 
     public VirtualFileSystem getVfs() {
         return vfs;
