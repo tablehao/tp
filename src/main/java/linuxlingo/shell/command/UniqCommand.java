@@ -1,7 +1,11 @@
 package linuxlingo.shell.command;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import linuxlingo.shell.CommandResult;
 import linuxlingo.shell.ShellSession;
+import linuxlingo.shell.vfs.VfsException;
 
 /**
  * Removes adjacent duplicate lines.
@@ -12,18 +16,63 @@ import linuxlingo.shell.ShellSession;
 public class UniqCommand implements Command {
     @Override
     public CommandResult execute(ShellSession session, String[] args, String stdin) {
-        // TODO: Implement uniq
-        //  1. Parse flag: -c (prefix lines with occurrence count)
-        //  2. Determine input source (per Command convention):
-        //     - If file arg present → session.getVfs().readFile(file, session.getWorkingDir())
-        //       Catch VfsException → return CommandResult.error("uniq: " + e.getMessage())
-        //     - Else if stdin != null → use stdin
-        //     - Else → return CommandResult.error("uniq: missing file operand")
-        //  3. Split by "\n", iterate: skip line if equals previous line
-        //     Track count of consecutive duplicates for -c
-        //  4. If -c: prefix each unique line with "      count " (7-char right-aligned)
-        //  5. Return CommandResult.success(String.join("\n", result))
-        throw new UnsupportedOperationException("TODO: implement UniqCommand");
+        boolean countOccurrences = false;
+        String file = null;
+
+        for (String arg : args) {
+            if (arg.equals("-c")) {
+                countOccurrences = true;
+            } else if (!arg.startsWith("-") && file == null) {
+                file = arg;
+            }
+        }
+
+        String content;
+        if (file != null) {
+            try {
+                content = session.getVfs().readFile(file, session.getWorkingDir());
+            } catch (VfsException e) {
+                return CommandResult.error("uniq: " + e.getMessage());
+            }
+        } else if (stdin != null) {
+            content = stdin;
+        } else {
+            return CommandResult.error("uniq: missing file operand");
+        }
+
+        if (content.isEmpty()) {
+            return CommandResult.success("");
+        }
+
+        String[] linesArray = content.split("\n", -1);
+        List<String> results = new ArrayList<>();
+
+        if (linesArray.length > 0) {
+            String currentLine = linesArray[0];
+            int count = 1;
+
+            for (int i = 1; i < linesArray.length; i++) {
+                if (linesArray[i].equals(currentLine)) {
+                    count++;
+                } else {
+                    if (countOccurrences) {
+                        results.add(String.format("%7d %s", count, currentLine));
+                    } else {
+                        results.add(currentLine);
+                    }
+                    currentLine = linesArray[i];
+                    count = 1;
+                }
+            }
+
+            if (countOccurrences) {
+                results.add(String.format("%7d %s", count, currentLine));
+            } else {
+                results.add(currentLine);
+            }
+        }
+
+        return CommandResult.success(String.join("\n", results));
     }
 
     @Override
