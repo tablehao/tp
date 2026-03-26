@@ -54,7 +54,6 @@ public class ShellSessionV2Test {
     }
 
     @Nested
-    @Disabled("v2.0 — suggestCommand to be implemented")
     class DidYouMean {
         @Test
         public void suggestCommand_typoClose_suggestsCorrect() {
@@ -112,8 +111,6 @@ public class ShellSessionV2Test {
             assertEquals(1, ShellSession.editDistance("ab", "abc"));
         }
 
-        // v2.0 @Disabled — placeholder returns Math.abs(length diff), not real edit distance
-        @Disabled("v2.0 — editDistance to be fully implemented")
         @Test
         public void editDistance_oneSubstitution_returnsOne() {
             assertEquals(1, ShellSession.editDistance("abc", "axc"));

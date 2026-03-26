@@ -99,4 +99,33 @@ public class LsCommandTest {
         assertTrue(result.isSuccess());
         assertEquals("", result.getStdout());
     }
+
+    @Test
+    public void ls_recursive_listsNestedDirectories() {
+        vfs.createDirectory("/tmp/project", "/", false);
+        vfs.createDirectory("/tmp/project/src", "/", false);
+        vfs.createFile("/tmp/project/src/main.txt", "/");
+
+        CommandResult result = command.execute(session, new String[]{"-R", "/tmp/project"}, null);
+
+        assertTrue(result.isSuccess());
+        assertTrue(result.getStdout().contains("/tmp/project:"));
+        assertTrue(result.getStdout().contains("src/"));
+        assertTrue(result.getStdout().contains("/tmp/project/src:"));
+        assertTrue(result.getStdout().contains("main.txt"));
+    }
+
+    @Test
+    public void ls_recursiveWithA_showsHiddenFiles() {
+        vfs.createDirectory("/tmp/hidden-root", "/", false);
+        vfs.createFile("/tmp/hidden-root/.secret", "/");
+        vfs.createDirectory("/tmp/hidden-root/sub", "/", false);
+        vfs.createFile("/tmp/hidden-root/sub/.nested", "/");
+
+        CommandResult result = command.execute(session, new String[]{"-Ra", "/tmp/hidden-root"}, null);
+
+        assertTrue(result.isSuccess());
+        assertTrue(result.getStdout().contains(".secret"));
+        assertTrue(result.getStdout().contains(".nested"));
+    }
 }

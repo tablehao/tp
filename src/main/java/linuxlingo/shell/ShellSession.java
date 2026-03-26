@@ -1,6 +1,7 @@
 package linuxlingo.shell;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,7 @@ import java.util.logging.Logger;
 
 import linuxlingo.cli.Ui;
 import linuxlingo.shell.command.Command;
+import linuxlingo.shell.vfs.FileNode;
 import linuxlingo.shell.vfs.VirtualFileSystem;
 
 /**
@@ -71,8 +73,7 @@ public class ShellSession {
     private final Ui ui;
     private boolean running;
     private final Map<String, String> aliases;
-    // v2.0: will be ShellLineReader once Owner B implements it
-    private Object lineReader;
+    private ShellLineReader lineReader;
     private final List<String> commandHistory;
 
     public ShellSession(VirtualFileSystem vfs, Ui ui) {
@@ -119,9 +120,9 @@ public class ShellSession {
         ui.println("Welcome to LinuxLingo Shell! Type 'exit' to quit.");
 
         while (running) {
-            // v1.0: read from Ui
-            // TODO v2.0 (Owner B): if lineReader != null, use lineReader.readLine(getPrompt()) instead
-            String input = ui.readLine(getPrompt());
+            String input = lineReader != null
+                    ? lineReader.readLine(getPrompt())
+                    : ui.readLine(getPrompt());
 
             // null signals end of piped test input
             if (input == null) {
@@ -164,9 +165,16 @@ public class ShellSession {
      * - Close lineReader in finally block
      */
     public void startInteractive() {
-        // TODO v2.0: implement JLine integration
-        // Placeholder: just start with plain Ui for now
-        start();
+        ShellLineReader originalReader = lineReader;
+        try {
+            lineReader = ShellLineReader.create(this);
+            start();
+        } finally {
+            if (lineReader != null && lineReader != originalReader) {
+                lineReader.close();
+            }
+            lineReader = originalReader;
+        }
     }
 
     /**
@@ -302,17 +310,17 @@ public class ShellSession {
             //     resolvedName = aliases.get(resolvedName);
             // }
 
-            // TODO v2.0 (Owner B): expand glob patterns in arguments
-            // String[] expandedArgs = expandGlobs(segment.args);
+            String[] expandedArgs = expandGlobs(segment.args);
 
             // ── v1.0: Look up command in registry ──
             Command command = registry.get(segment.commandName);
             if (command == null) {
                 String errorMsg = segment.commandName + ": command not found";
                 LOGGER.log(Level.WARNING, "Command not found: ''{0}''", segment.commandName);
-                // TODO v2.0 (Owner B): add "Did you mean?" suggestion
-                // String suggestion = suggestCommand(segment.commandName);
-                // if (suggestion != null) { errorMsg += "\n" + suggestion; }
+                String suggestion = suggestCommand(segment.commandName);
+                if (suggestion != null) {
+                    errorMsg += "\n" + suggestion;
+                }
                 ui.println(errorMsg);
                 setLastExitCode(127);
                 lastResult = CommandResult.error(errorMsg);
@@ -320,7 +328,7 @@ public class ShellSession {
             }
 
             // ── v1.0: Execute the command ──
-            CommandResult result = command.execute(this, segment.args, stdin);
+            CommandResult result = command.execute(this, expandedArgs, stdin);
 
             // Print stderr immediately (user is not redirected)
             if (!result.getStderr().isEmpty()) {
@@ -415,11 +423,11 @@ public class ShellSession {
         return aliases;
     }
 
-    public Object getLineReader() {
+    public ShellLineReader getLineReader() {
         return lineReader;
     }
 
-    public void setLineReader(Object reader) {
+    public void setLineReader(ShellLineReader reader) {
         this.lineReader = reader;
     }
 
@@ -445,7 +453,26 @@ public class ShellSession {
      * @return a suggestion string like "Did you mean 'ls'?" or null
      */
     public String suggestCommand(String input) {
-        // TODO v2.0 (Owner B): implement using editDistance() and registry.getAllNames()
+        if (input == null || input.isBlank()) {
+            return null;
+        }
+
+        String bestMatch = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (String commandName : registry.getAllNames()) {
+            if (input.equals(commandName)) {
+                return null;
+            }
+            int distance = editDistance(input, commandName);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestMatch = commandName;
+            }
+        }
+
+        if (bestMatch != null && bestDistance <= 2) {
+            return "Did you mean '" + bestMatch + "'?";
+        }
         return null;
     }
 
@@ -460,8 +487,28 @@ public class ShellSession {
      * @return the edit distance
      */
     static int editDistance(String a, String b) {
-        // TODO v2.0 (Owner B): implement Levenshtein DP algorithm
-        return Math.abs(a.length() - b.length()); // placeholder
+        if (a == null || b == null) {
+            throw new IllegalArgumentException("editDistance inputs must not be null");
+        }
+
+        int[][] dp = new int[a.length() + 1][b.length() + 1];
+        for (int i = 0; i <= a.length(); i++) {
+            dp[i][0] = i;
+        }
+        for (int j = 0; j <= b.length(); j++) {
+            dp[0][j] = j;
+        }
+
+        for (int i = 1; i <= a.length(); i++) {
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                int insertion = dp[i][j - 1] + 1;
+                int deletion = dp[i - 1][j] + 1;
+                int substitution = dp[i - 1][j - 1] + cost;
+                dp[i][j] = Math.min(Math.min(insertion, deletion), substitution);
+            }
+        }
+        return dp[a.length()][b.length()];
     }
 
     // ─── Glob expansion ─────────────────────────────────────────
@@ -478,8 +525,23 @@ public class ShellSession {
      * @return expanded arguments (or originals if no globs matched)
      */
     public String[] expandGlobs(String[] args) {
-        // TODO v2.0 (Owner B): implement glob expansion
-        return args; // placeholder: return args unchanged
+        List<String> expanded = new ArrayList<>();
+        for (String arg : args) {
+            boolean hasWildcard = arg.contains("*") || arg.contains("?");
+            boolean hasPathSeparator = arg.contains("/");
+            if (!hasWildcard || !hasPathSeparator) {
+                expanded.add(arg);
+                continue;
+            }
+
+            List<String> matches = expandSingleGlob(arg);
+            if (matches.isEmpty()) {
+                expanded.add(arg);
+            } else {
+                expanded.addAll(matches);
+            }
+        }
+        return expanded.toArray(new String[0]);
     }
 
     /**
@@ -494,7 +556,30 @@ public class ShellSession {
      * @return list of matched absolute paths, or empty if no matches
      */
     private List<String> expandSingleGlob(String pattern) {
-        // TODO v2.0 (Owner B): implement VFS glob matching
-        return new ArrayList<>(); // placeholder
+        int lastSlash = pattern.lastIndexOf('/');
+        String directoryPart;
+        String namePattern;
+
+        if (lastSlash < 0) {
+            directoryPart = ".";
+            namePattern = pattern;
+        } else if (lastSlash == 0) {
+            directoryPart = "/";
+            namePattern = pattern.substring(1);
+        } else {
+            directoryPart = pattern.substring(0, lastSlash);
+            namePattern = pattern.substring(lastSlash + 1);
+        }
+
+        try {
+            List<String> matches = new ArrayList<>();
+            for (FileNode node : vfs.findByName(directoryPart, workingDir, namePattern)) {
+                matches.add(node.getAbsolutePath());
+            }
+            Collections.sort(matches);
+            return matches;
+        } catch (RuntimeException e) {
+            return new ArrayList<>();
+        }
     }
 }
