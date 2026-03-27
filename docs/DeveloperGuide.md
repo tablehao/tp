@@ -562,6 +562,14 @@ The tokenizer uses a character-by-character state machine with three states:
 
 After tokenization, the token list is split into `Segment` objects at inter-segment operators (`PIPE`, `AND`, `SEMICOLON`). Within each segment, `REDIRECT` / `APPEND` tokens consume the next `WORD` token as the redirect target file.
 
+The parser also handles two lookahead cases during tokenization: `||` and `>>` are
+distinguished from `|` and `>` by peeking at the next character before emitting a token.
+A lone `&` character (not followed by another `&`) is treated as a literal word character
+rather than an operator, matching standard shell behaviour. The `Expecting` state tracks
+whether the next WORD token should be consumed as a redirect target (for `>` / `>>`) or
+as an input redirect source (for `<`), and resets silently on malformed input such as
+a missing filename after a redirect operator.
+
 **Execution engine (`ShellSession.runPlan()`):**
 
 The following sequence diagram shows how `echo hello | grep h > output.txt` is executed:
