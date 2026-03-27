@@ -778,7 +778,14 @@ For practical questions, `ExamSession.handlePracQuestion()`:
 ### Question Parsing and Loading
 
 Question bank files use a pipe-delimited format. `QuestionParser` processes each line into typed `Question` objects.
-
+The question bank parsing feature is implemented by QuestionParser, which reads plain-text .txt files from the data/questions directory via Storage.readLines(Path) and converts each non-comment, non-blank line into a concrete Question object. 
+Each line is pipe-delimited into up to six fields: TYPE | DIFFICULTY | QUESTION_TEXT | ANSWER | OPTIONS | EXPLANATION. 
+QuestionParser normalises the type and difficulty (defaulting invalid difficulty values to MEDIUM), then dispatches to parseMcq, parseFitb, or parsePrac based on the TYPE field.
+MCQ options are parsed into a LinkedHashMap<Character, String> to preserve display order, FITB answers are split on unescaped | (with \| treated as a literal pipe), and PRAC answers are currently parsed into simple Checkpoint objects, with a v2.0 hook for optional setup items. 
+Malformed lines are skipped with a logged warning instead of failing the entire file, and an assertion ensures that the resulting question list contains no null entries. 
+We chose a pipe-separated text format instead of JSON/YAML to keep the files compact, easy to edit, and diff-friendly for contributors. 
+Alternatives such as embedding questions directly in Java code or using a more complex DSL were rejected because they would make non-developer contributions harder and tightly couple content with implementation; 
+the current design keeps parsing logic centralized in QuestionParser and lets the rest of the exam module work purely with typed Question objects.
 **Data flow:**
 
 ```plantuml
