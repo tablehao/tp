@@ -603,6 +603,13 @@ SS -> VFS : writeFile("output.txt", workingDir, "hello", false)
 @enduml
 ```
 
+When a command name is not found in the registry, `runPlan()` calls `suggestCommand()`
+before printing the error. This method computes the Levenshtein edit distance between
+the mistyped input and every registered command name, returning a "Did you mean 'X'?"
+hint if the closest match is within distance 2. Glob patterns in arguments (containing
+`*` or `?`) are expanded against the VFS via `expandGlobs()` before the command receives
+them — if no VFS paths match the pattern, the literal argument is passed through unchanged.
+
 **Operator semantics:**
 
 | Operator | Symbol | Behavior |
